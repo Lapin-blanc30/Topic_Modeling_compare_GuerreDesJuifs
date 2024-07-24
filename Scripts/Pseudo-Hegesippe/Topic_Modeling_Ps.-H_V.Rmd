@@ -1,0 +1,419 @@
+---
+title: "Topic Modeling Ps.-H V"
+author: "Alice Leflaëc"
+date: "2023-05-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# I. Préparation des données
+
+ 1.1 Définition de la session de travail
+# Indication du chemin vers le notebook
+```{r}
+setwd("~/Documents/GitHub/Topic_Modeling_compare_GuerreDesJuifs/Scripts/Pseudo-Hegesippe")
+monDossier="~/Documents/GitHub/Topic_Modeling_compare_GuerreDesJuifs/Scripts/Pseudo-Hegesippe"
+```
+
+1.2 Récupération du texte, premier nettoyage et lemmatisation
+Pour la récupération du texte, un premier nettoyage et la lemmatisation, cf. fichier Topic_Modeling_Ps.-H_complet.Rmd
+Les données concernant le livre V du Pseudo-Hégésippe ont été extraites du fichier .csv et un nouveau fichier .csv a été créé.
+
+ 1.3 Second nettoyage du texte : retrait des _stopwords_
+
+ 1.3.1 Importation de la liste de _stopwords_
+ 
+```{r}
+StopWords <- "../../StopwordsLatin(actualise).txt"
+Stops = read.csv(StopWords, header=FALSE, stringsAsFactors=FALSE)[,]
+head(Stops,10)
+```
+
+ 1.3.2 Nettoyage du texte
+ 
+Il est nécessaire de créer une chaîne de caractères.
+```{r}
+df_PH_V <- read.csv("../../Clearer_PH/PH-V-clearer-pie.csv", sep=",")
+#Création d'une chaîne de caractère vide qui contiendra à l'avenir tous les textes contenus dans df. 
+#[Dans le cours de Simon, la colomme Lemma est déjà une chaîne de caractères. On ruse donc pour obtenir cette chaîne (elle est vide pour l'instant mais on dira à R : si le mot n'apparaît pas dans les stopwords ou dans la ponctuation, tu le mets dans cette chaîne de caractères).]
+chaîne_de_caractères_PH_V <- ""
+#Laisser le contenu vide : il n'y a rien pour l'instant.
+```
+
+Puis on indique le contenu de la chaîne de caractères
+
+# Réduction à la minuscule et retrait des stopwords 
+On indique qu'on réduit à la minuscule pour chaque mot à l'aide d'une boucle et qu'on ne prend pas en compte les stopwords.
+
+```{r}
+for (word in tolower(df_PH_V$lemma)) {
+  if (!word %in% Stops) {
+    chaîne_de_caractères_PH_V <- paste(chaîne_de_caractères_PH_V, word, sep=" ")
+  }
+}
+chaîne_de_caractères_PH_V
+```
+
+
+  1.4. Création d'une liste pour une approche _bag_of_words_
+
+On divise le texte en une dizaine de morceaux (10 est un chiffre arbitraire, on peut en mettre plus ou moins) et on met ces dix morceaux dans une liste qu'on peut par exemple baptiser Extraits. C'est ce qui permet l'approche _bag_of_words_.
+
+Approche _bag_of_words_ : idée que le monde peut être décrit au moyen d'un dictionnaire. Dans sa version la plus simple, un document particulier est représenté par l'histogramme des occurrences des mots le composant : pour un document donné, chaque mot se voit affecté le nombre de fois qu'il apparaît dans le document (source : Wikipédia).
+
+```{r}
+PSH5_propre <- readLines("../../Textes/Pseudo-Hegesippe/PSH_V_propre_propre.txt")
+
+Nb_sequences <- 10
+Extraits_PH_V<- strwrap(PSH5_propre, nchar(PSH5_propre) / Nb_sequences)
+#On peut afficher le contenu de chaque séquence :
+Extraits_PH_V[1]
+```
+
+
+ 1.5.Transformation en matrice vectorielle
+
+Il faut installer les packages tm et tidytext.
+```{r}
+if(!require("tm")){
+  install.packages("tm")
+  library("tm")
+}
+if(!require("tidytext")){
+  install.packages("tidytext")
+  library("tidytext")
+}
+
+#Je transforme mes textes en corpus avec la fonction `corpus()`, un objet de classe `corpus` manipulable dans `R` contenant des données et des métadonnées.
+#La fonction `VectorSource` transforme chaque document en vecteur.
+corpus_PH_V <- Corpus(VectorSource(Extraits_PH_V), readerControl = list(language = "lat"))
+# J'affiche les informations à propos de ce corpus
+corpus_PH_V
+```
+
+
+ 1.6 Création d'un _document_term_matrix_
+
+Un _document_term_matrix_ est une matrice mathématique qui décrit la fréquence des termes qui apparaissent dans une collection de documents.
+
+```{r}
+dtm_PH_V <- DocumentTermMatrix(corpus_PH_V)
+dtm_PH_V
+```
+
+
+#II. Analyse des données : fréquence des termes
+
+ 2.1.Graphe représentant la fréquence des termes
+ Installation de la library pour le graphe et dessin du graphe
+
+```{r}
+freq_PH_V <- as.data.frame(colSums(as.matrix(dtm_PH_V)))
+colnames(freq_PH_V) <- c("frequence")
+#as.data.frame est une fonction vérifiant qu'un objet est un dataframe ou le forçant à le devenir si c'est possible.
+#colSums est une fonction permettant de former des sommes et des moyennes de lignes et de colonnes pour des tableaux et des dataframes.
+#as.matrix est une fonction générique convertissant en matrice.
+#colnames récupère ou définit le nom des lignes et des colonnes dans un objet de type matrice.
+#c est une fonction générique qui combine ses arguments. La méthode par défaut combine les arguments pour former un vecteur.
+
+#Pour dessiner un graphe, nécessité d'installer une nouvelle library: `ggplot2`
+#gg = Grammar of Graphics
+#Avec ggplot 2, les données représentées graphiquement proviennent toujours d'un dataframe.
+if (!require("ggplot2")){
+  install.packages("ggplot2")
+  library("ggplot2")
+}
+#Dessin du graphe
+#La fonction ggplot initialise le graphique. On commence par définir la source des données (ici freq_Vulgate), puis on indique quelle donnée on veut représenter (les attributs esthétiques) en passant des arguments dans la fonction aes(). Cette fonction spécifie les variables à visualiser et associe à chaque variable un emplacement ou un rôle: on renseigne le paramètre x qui est la variable à représenter sur l'axe horizontal (ici la fréquence).
+#On ajoute, enfin, les éléments de représentation graphique (= geom). On les ajoute à l'objet graphique de base avec l'opérateur +. geom_density permet d'afficher l'estimation de densité d'une variable numérique. On crée une courbe de distribution.
+#Source de la plupart des explications : https://juba.github.io/tidyverse/08-ggplot2.html
+ggplot(freq_PH_V, aes(x=frequence)) + geom_density()
+```
+
+
+ 2.2 Analyse des données
+ 
+ On retrouve la loi de Zipf dans la distribution des données.
+ 
+ 2.2.1 Mots avec de faibles fréquences
+On peut compter les mots avec les fréquences faibles, par exemple avec moins de 100 occurrences (n+1).
+
+```{r}
+motsPeuFrequents_PH_V <- findFreqTerms(dtm_PH_V, 0, 99)
+length(motsPeuFrequents_PH_V)
+head(motsPeuFrequents_PH_V,50)
+```
+
+
+ 2.2.2 Mots avec de fortes fréquences
+ On peut aussi compter et afficher les mots les plus fréquents, par exemple avec plus de 100 ou 200 occurrences.
+
+```{r}
+motsTresFrequents_PH_V <- findFreqTerms(dtm_PH_V, 99, Inf)
+length(motsTresFrequents_PH_V)
+head(motsTresFrequents_PH_V,50)
+```
+
+```{r}
+motsTresFrequents_PH_V <- findFreqTerms(dtm_PH_V, 199, Inf)
+length(motsTresFrequents_PH_V)
+head(motsTresFrequents_PH_V,50)
+```
+
+
+ 2.2.3.Association entre les mots
+  Hostis
+```{r}
+findAssocs(dtm_PH_V, terms = "hostis", corlimit = 0.7)
+```
+
+Iudaeus
+```{r}
+findAssocs(dtm_PH_V, terms = "rex", corlimit = 0.7)
+```
+
+Romanus
+```{r}
+findAssocs(dtm_PH_V, terms = "deus", corlimit = 0.7)
+```
+```{r}
+
+```
+
+Templum
+```{r}
+findAssocs(dtm_PH_V, terms = "murus", corlimit = 0.7)
+```
+
+ 2.3 Nettoyage de la DTM pour éliminer les rangs vides.
+
+```{r}
+rowTotals <- apply(dtm_PH_V, 1, sum)      #On trouve la somme des mots dans chaque document.
+dtm_PH_V_clean   <- dtm_PH_V[rowTotals> 0, ]    #On retire tous les documents sans mot.
+```
+
+
+#III. Topic Modeling
+
+Un thème ( _topic_ ) est un _cluster_ de mots i.e. une récurrence de co-occurrences.
+
+3.1 Installation de la library pour le _topic_modeling_
+
+Comme le package "topicmodels" ne parvenait pas à s'installer, il a fallu télécharger la bibliothèque GSL (bibliothèque pour le calcul numérique en C et C++) via le terminal de l'ordinateur.
+
+```{r}
+if(!require("topicmodels")){
+  install.packages("topicmodels")
+  library("topicmodels")
+}
+```
+ 
+
+ 3.2 Les paramètres de Gibbs
+ 
+ C'est une probabilité conditionnelle qui s'appuie, pour calculer le _β_ d'un mot, sur le _β_ des mots voisins. Pour ce faire, il faut déterminer:
+1. À quel point un document aime un _topic_.
+2. À quel point un _topic_ aime un mot.
+
+ 3.2.1 Installation de la library "ldatuning" pour déterminer le nombre optimal de topics
+ 
+Pour installer cette library, il a été nécessaire de taper la commande suivante dans le terminal de l'ordinateur : sudo apt-get install libmpfr-dev (travail sous Linux).
+
+```{r}
+if(!require("ldatuning")){
+  install.packages("ldatuning")
+  library("ldatuning")
+}
+```
+
+3.2.2 Détermination du nombre optimal de topics.
+```{r}
+#Exécution du calcul avec la fonction FindTopicsNumber
+topicsNumber_PH_V <- FindTopicsNumber(
+  #La DTM utilisée est la suivante :
+  dtm_PH_V_clean,
+  #Le nombre de possibilités testées :
+  topics = seq(from = 2, to = 20, by = 1),
+  #Les métriques utilisées
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  verbose = TRUE #Si c'est FALSE, cela supprime tous les avertissments et les informations additionnelles.
+)
+
+#Utilisation de la fonction seq()qui permet de créer une séquence d'éléments dans un vecteur. La syntaxe est la suivante : seq (from, to, by, length.out) from = élément de début de la séquence ; to = élément de fin de la séquence ; by = différence entre les éléments ; length.out = longueur maximale du vecteur.
+
+#Affichage du résultat
+FindTopicsNumber_plot(topicsNumber_PH_V)
+#Lecture du graph : "“Griffiths” et “Deveaud” suivent un principe de maximisation alors que “CaoJuan” et “Arun” obéissent à un principe de minimisation. Je vous épargne les détails techniques, mais l’idée ici est d’identifier l’endroit où simultanément “Griffiths” et “Deveaud” se rejoignent le plus et où c’est également le cas pour “CaoJuan” et “Arun”. Tout est histoire de compromis, trouver l’endroit ou l’écart entre les courbes est minimal en haut et en bas !" (source : https://ouvrir.passages.cnrs.fr/wp-content/uploads/2019/07/rapp_topicmodel.html)
+```
+8 peut apparaître comme le nombre optimal de topics.
+ 
+ 
+ 3.3.3 Exécution du calcul pour le topic modeling
+```{r}
+## Set parameters for Gibbs sampling
+#Le modèle va tourner 2000 fois avant de commencer à enregistrer les résultats
+burnin <- 2000
+#Après cela il va encore tourner 2000 fois
+iter <- 2000
+# Il ne va enregistrer le résultat que toutes les 500 itérations
+thin <- 500
+#seed et nstart pour la reproductibilité
+SEED=c(1, 2, 3, 4, 5)
+seed <-SEED
+nstart <- 5
+#Seul le meilleur modèle est utilisé.
+best <- TRUE
+
+#8 topics
+lda_gibbs_8_PH_V <- LDA(dtm_PH_V_clean, 8, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+#Utilisation de la fonction LDA avec la dtm utilisée, le nombre de topics, la méthode et le contrôle appliqué.
+```
+
+On peut désormais voir les premiers résultats. Il s'agit des mots dont la fréquence d'utilisation est corrélée.
+
+```{r}
+"LDA GIBBS 8"
+termsTopic_lda_gibbs_8_PH_V <- as.data.frame(terms(lda_gibbs_8_PH_V,10))
+head(termsTopic_lda_gibbs_8_PH_V,11)
+```
+
+Nous allons utiliser `lda_gibbs_8_PH_V` et construire une matrice avec les _β_ des tokens (pour les ɣ, et donc des probabilités par document, on aurait mis `matrix = "gamma"`). Chaque token est répété deux fois, avec une probabilité pour chaque _topic_:
+
+```{r}
+topics_PH_V <- tidy(lda_gibbs_8_PH_V, matrix = "beta")
+topics_PH_V
+```
+
+#IV. Visualisation
+
+ 4.1 Récupération des mots
+
+ 4.1.1 Installation de la library "dplyr"
+Cette library facilite le traitement et la manipulation de données contenues dans une ou plusieurs tables en proposant une syntaxe sous forme de verbes.
+```{r}
+if (!require("dplyr")){
+   install.packages("dplyr")
+  library("dplyr")
+}
+```
+
+ 4.1.2 Affichage des mots récupérés dans un graphe
+
+```{r}
+#Recupération des mots
+top_terms_PH_V <- topics_PH_V %>%
+  group_by(topic) %>%
+  top_n(10, beta) %>%
+  ungroup()  %>%
+  arrange(topic, -beta)
+#Dessin du graphe
+#On retrouve la fonction ggplot, cette fois-ci avec geom_col qui permet de créer des diagrammes à barres (barplots).
+top_terms_PH_V %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) +
+                                                  facet_wrap(~ topic, scales = "free") +
+                                                  coord_flip() +
+                                                  scale_x_reordered()
+```
+
+ 4.2 Association des tokens aux topics
+
+Installation de la library reshape2 pour pouvoir utiliser la fonction melt qui permet de modifier le format des données en fonction d’une ou plusieurs variables de référence (passage d'une table large avec de nombreuses colonnes à une table haute avec de nombreuses lignes et peu de colonnes).
+```{r}
+if (!require("reshape2")){
+  install.packages("reshape2")
+  library("reshape2")
+}
+```
+ 
+```{r}
+df_PH_V_2 <- melt(as.matrix(dtm_PH_V_clean))
+df_PH_V_2 <- df_PH_V_2[df_PH_V_2$Terms %in%findFreqTerms(dtm_PH_V_clean, lowfreq = 99), ]
+ggplot(df_PH_V_2, aes(as.factor(Docs), Terms, fill=log(value))) +
+                                             geom_tile() +
+                                             xlab("Sujets") +
+                                             scale_fill_continuous(low="#FEE6CE", high="#E6550D") +
+                                             theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+```{r, fig.width=12, fig.height=12}
+tt_PH_V <- posterior(lda_gibbs_8_PH_V)$terms
+melted_PH_V = melt(tt_PH_V[,findFreqTerms(dtm_PH_V_clean, 75,500)])
+
+colnames(melted_PH_V) <- c("Topics", "Terms", "value")
+melted_PH_V$Topics <- as.factor(melted_PH_V$Topics)
+ggplot(data = melted_PH_V, aes(x=Topics, y=Terms, fill=value)) +
+                                                                      geom_tile() +
+                                                             theme(text = element_text(size=35))
+```
+
+ 4.3 Observation du _score gamma_
+ 
+Le score gamma est la probabilité qu'un document contienne un sujet.
+
+Les calculs sont faits avec un nombre de 8 topics.
+```{r}
+DocumentTopicProbabilities_PH_V <- as.data.frame(lda_gibbs_8_PH_V@gamma)
+rownames(DocumentTopicProbabilities_PH_V) <- rownames(corpus_PH_V)
+head(DocumentTopicProbabilities_PH_V)
+```
+
+ 4.4. Nuages de mots
+ 
+Pour faire des faire des _word clouds_, il faut installer les libraries suivantes :
+```{r}
+if (!require("wordcloud")){
+   install.packages("wordcloud")
+  library("wordcloud")
+}
+if (!require("RColorBrewer")){
+   install.packages("RColorBrewer")
+  library("RColorBrewer")
+}
+if (!require("wordcloud2")){
+   install.packages("wordcloud2")
+  library("wordcloud2")
+}
+```
+
+On récupère les mots et on les associe à leur 𝛃
+
+```{r, fig.width=20, fig.height=20}
+tm_PH_V <- posterior(lda_gibbs_8_PH_V)$terms
+data_PH_V = data.frame(colnames(tm_PH_V))
+head(data_PH_V)
+```
+
+
+Puis on produit une visualisation par _topic_
+
+```{r, fig.width=30, fig.height=20}
+for(topic in seq(from = 1, to = 8, by = 1)){
+    data_PH_V$topic <-tm_PH_V[topic,]
+    #text(x=0.5, y=1, paste("V",topic, sep=""),cex=0.6)
+    wordcloud(
+      words = data_PH_V$colnames.tm_PH_V., #Mots à dessiner
+      freq = data_PH_V$topic, #Fréquence des mots
+      #Min.freq=sous ce seuil, les mots ne seront pas affichés
+      min.freq=0.0002,
+      #max.words=nombre maximum de mots à afficher
+      max.words=20,
+      #Random.order dessine les mots dans un ordre aléatoire. Si faux, ils sont dessinés par ordre décroissant de la fréquence.
+      random.order=FALSE,
+      #rot.per=% de mots à 90°
+      rot.per=.35,
+      #taille du graphe
+      scale=c(10,10),
+      #couleurs
+      colors = brewer.pal(5, "Dark2")
+      # il est possible de rentrer directement les couleurs qui nous intéressent
+      #c("red", "blue", "yellow", "chartreuse", "cornflowerblue", "darkorange")
+    )
+}
+```
+

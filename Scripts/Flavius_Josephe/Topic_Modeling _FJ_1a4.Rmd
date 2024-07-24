@@ -1,0 +1,354 @@
+---
+title: "Topic_Modeling_FJ_I_IV"
+author: "Mathilde Schwoerer"
+date: "2023-05-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# I. Préparation des données
+
+ 1.1 Définition de la session de travail
+# Indication du chemin vers le notebook
+```{r}
+setwd("~/Documents/FJ-PsH")
+monDossier="~/FJ-PsH/Textes"
+```
+
+Le texte de Flavius Josèphe a été nettoyé et lemmatisé dans un script Python. Puis il a été découpé en différentes parties correspondant à notre analyse : ouvrage complet ; livres I-IV et livres V-VII.
+
+```{r}
+FJ_1_4 <- readLines("Textes/FJ_I-IV_lemm.txt")
+```
+
+ 1.2 Transformation en matrice vectorielle
+```{r}
+#Je charge deux nouvelles librairies pour le _text mining_ qui me permettent de créer ma matrice
+if(!require("tm")){
+  install.packages("tm")
+  library("tm")
+}
+if(!require("tidytext")){
+  install.packages("tidytext")
+  library("tidytext")
+}
+# Je transforme mes textes en corpus avec la fonction `corpus()`, un objet de classe `corpus` manipulable dans `R` contenant des données et des métadonnées
+#La fonction `VectorSource` transforme chaque document en vecteur
+corpus_FJ_1_4 <- Corpus(VectorSource(FJ_1_4), readerControl = list(language = "grc"))
+# J'affiche les informations à propos de ce corpus
+corpus_FJ_1_4
+```
+
+
+```{r}
+if(!require("quanteda")){
+  install.packages("quanteda")
+  library("quanteda")
+}
+
+ntoken(FJ_1_4)
+```
+
+ 1.3 Création d'un _document_term_matrix_
+
+Un _document_term_matrix_ est une matrice mathématique qui décrit la fréquence des termes qui apparaissent dans une collection de documents.
+
+```{r}
+dtm_FJ_1_4 <- DocumentTermMatrix(corpus_FJ_1_4)
+dtm_FJ_1_4
+
+```
+
+#II. Analyse des données : fréquence des termes
+
+ 2.1.Graphe représentant la fréquence des termes
+ Installation de la library pour le graphe et dessin du graphe
+
+```{r}
+freq_FJ_1_4 <- as.data.frame(colSums(as.matrix(dtm_FJ_1_4)))
+colnames(freq_FJ_1_4) <- c("frequence")
+#as.data.frame est une fonction vérifiant qu'un objet est un dataframe ou le forçant à le devenir si c'est possible.
+#colSums est une fonction permettant de former des sommes et des moyennes de lignes et de colonnes pour des tableaux et des dataframes.
+#as.matrix est une fonction générique convertissant en matrice.
+#colnames récupère ou définit le nom des lignes et des colonnes dans un objet de type matrice.
+#c est une fonction générique qui combine ses arguments. La méthode par défaut combine les arguments pour former un vecteur.
+
+#Pour dessiner un graphe, nécessité d'installer une nouvelle library: `ggplot2`
+#gg = Grammar of Graphics
+#Avec ggplot 2, les données représentées graphiquement proviennent toujours d'un dataframe.
+if (!require("ggplot2")){
+  install.packages("ggplot2")
+  library("ggplot2")
+}
+#Dessin du graphe
+#La fonction ggplot initialise le graphique. On commence par définir la source des données (ici freq_Vulgate), puis on indique quelle donnée on veut représenter (les attributs esthétiques) en passant des arguments dans la fonction aes(). Cette fonction spécifie les variables à visualiser et associe à chaque variable un emplacement ou un rôle: on renseigne le paramètre x qui est la variable à représenter sur l'axe horizontal (ici la fréquence).
+#On ajoute, enfin, les éléments de représentation graphique (= geom). On les ajoute à l'objet graphique de base avec l'opérateur +. geom_density permet d'afficher l'estimation de densité d'une variable numérique. On crée une courbe de distribution.
+#Source de la plupart des explications : https://juba.github.io/tidyverse/08-ggplot2.html
+ggplot(freq_FJ_1_4, aes(x=frequence)) + geom_density()
+```
+
+
+ 2.2 Analyse des données
+ 
+ On retrouve la loi de Zipf dans la distribution des données.
+ 
+ 2.2.1 Mots avec de faibles fréquences
+On peut compter les mots avec les fréquences faibles, par exemple avec moins de 100 occurrences (n+1).
+
+```{r}
+motsPeuFrequents_FJ_1_4 <- findFreqTerms(dtm_FJ_1_4, 0, 99)
+length(motsPeuFrequents_FJ_1_4)
+head(motsPeuFrequents_FJ_1_4,50)
+```
+
+
+ 2.2.2 Mots avec de fortes fréquences
+ On peut aussi compter et afficher les mots les plus fréquents, par exemple avec plus de 100 ou 200 occurrences.
+
+```{r}
+motsTresFrequents_FJ_1_4 <- findFreqTerms(dtm_FJ_1_4, 99, Inf)
+length(motsTresFrequents_FJ_1_4)
+head(motsTresFrequents_FJ_1_4,50)
+```
+
+```{r}
+motsTresFrequents_FJ_1_4 <- findFreqTerms(dtm_FJ_1_4, 199, Inf)
+length(motsTresFrequents_FJ_1_4)
+head(motsTresFrequents_FJ_1_4,50)
+```
+
+
+ 2.2 Nettoyage de la DTM pour éliminer les rangs vides.
+
+```{r}
+rowTotals <- apply(dtm_FJ_1_4, 1, sum)      #On trouve la somme des mots dans chaque document.
+dtm_FJ_1_4_clean   <- dtm_FJ_1_4[rowTotals> 0, ]    #On retire tous les documents sans mot.
+```
+
+
+#III. Topic Modeling
+
+Un thème ( _topic_ ) est un _cluster_ de mots i.e. une récurrence de co-occurrences.
+
+3.1 Installation de la library pour le _topic_modeling_
+
+Comme le package "topicmodels" ne parvenait pas à s'installer, il a fallu télécharger la bibliothèque GSL (bibliothèque pour le calcul numérique en C et C++) via le terminal de l'ordinateur.
+
+```{r}
+if(!require("topicmodels")){
+  install.packages("topicmodels")
+  library("topicmodels")
+}
+```
+ 
+
+ 3.2 Les paramètres de Gibbs
+ 
+ C'est une probabilité conditionnelle qui s'appuie, pour calculer le _β_ d'un mot, sur le _β_ des mots voisins. Pour ce faire, il faut déterminer:
+1. À quel point un document aime un _topic_.
+2. À quel point un _topic_ aime un mot.
+
+ 3.2.1 Installation de la library "ldatuning" pour déterminer le nombre optimal de topics
+ 
+Pour installer cette library, il a été nécessaire de taper la commande suivante dans le terminal de l'ordinateur : sudo apt-get install libmpfr-dev (travail sous Linux).
+
+```{r}
+if(!require("ldatuning")){
+  install.packages("ldatuning")
+  library("ldatuning")
+}
+```
+
+3.2.2 Détermination du nombre optimal de topics.
+```{r}
+#Exécution du calcul avec la fonction FindTopicsNumber
+topicsNumber_FJ_1_4 <- FindTopicsNumber(
+  #La DTM utilisée est la suivante :
+  dtm_FJ_1_4_clean,
+  #Le nombre de possibilités testées :
+  topics = seq(from = 2, to = 20, by = 1),
+  #Les métriques utilisées
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  verbose = TRUE #Si c'est FALSE, cela supprime tous les avertissments et les informations additionnelles.
+)
+
+#Utilisation de la fonction seq()qui permet de créer une séquence d'éléments dans un vecteur. La syntaxe est la suivante : seq (from, to, by, length.out) from = élément de début de la séquence ; to = élément de fin de la séquence ; by = différence entre les éléments ; length.out = longueur maximale du vecteur.
+
+#Affichage du résultat
+FindTopicsNumber_plot(topicsNumber_FJ_1_4)
+#Lecture du graph : "“Griffiths” et “Deveaud” suivent un principe de maximisation alors que “CaoJuan” et “Arun” obéissent à un principe de minimisation. Je vous épargne les détails techniques, mais l’idée ici est d’identifier l’endroit où simultanément “Griffiths” et “Deveaud” se rejoignent le plus et où c’est également le cas pour “CaoJuan” et “Arun”. Tout est histoire de compromis, trouver l’endroit ou l’écart entre les courbes est minimal en haut et en bas !" (source : https://ouvrir.passages.cnrs.fr/wp-content/uploads/2019/07/rapp_topicmodel.html)
+```
+9 apparaît comme le nombre optimal de topics. 
+Règle du coude : on s'arrête quand l'ajout d'un sujet n'améliore pas grandement le pouvoir prédictif de l'algorithme (stabilisation des prédictions minimales à partir de 9.)
+ 
+ 3.3.3 Exécution du calcul pour le topic modeling
+```{r}
+## Set parameters for Gibbs sampling
+#Le modèle va tourner 2000 fois avant de commencer à enregistrer les résultats
+burnin <- 2000
+#Après cela il va encore tourner 2000 fois
+iter <- 2000
+# Il ne va enregistrer le résultat que toutes les 500 itérations
+thin <- 500
+#seed et nstart pour la reproductibilité
+SEED=c(1, 2, 3, 4, 5)
+seed <-SEED
+nstart <- 5
+#Seul le meilleur modèle est utilisé.
+best <- TRUE
+#6 topics
+lda_gibbs_FJ_1_4 <- LDA(dtm_FJ_1_4_clean, 9, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+#Utilisation de la fonction LDA avec la dtm utilisée, le nombre de topics, la méthode et le contrôle appliqué.
+```
+
+On peut désormais voir les premiers résultats. Il s'agit des mots dont la fréquence d'utilisation est corrélée.
+
+```{r}
+"LDA GIBBS 9"
+termsTopic_lda_gibbs_FJ_1_4 <- as.data.frame(terms(lda_gibbs_FJ_1_4,9))
+head(termsTopic_lda_gibbs_FJ_1_4,11)
+```
+
+Nous allons utiliser `lda_gibbs_6_FJ_VàVII` et construire une matrice avec les _β_ des tokens (pour les ɣ, et donc des probabilités par document, on aurait mis `matrix = "gamma"`). Chaque token est répété deux fois, avec une probabilité pour chaque _topic_:
+
+```{r}
+topics_FJ_1_4 <- tidy(lda_gibbs_FJ_1_4, matrix = "beta")
+topics_FJ_1_4
+```
+
+
+
+
+#IV. Visualisation
+
+ 4.1 Récupération des mots
+
+ 4.1.1 Installation de la library "dplyr"
+Cette library facilite le traitement et la manipulation de données contenues dans une ou plusieurs tables en proposant une syntaxe sous forme de verbes.
+```{r}
+if (!require("dplyr")){
+   install.packages("dplyr")
+  library("dplyr")
+}
+```
+
+ 4.1.2 Affichage des mots récupérés dans un graphe
+
+```{r}
+#Recupération des mots
+top_terms_FJ_1_4 <- topics_FJ_1_4 %>%
+  group_by(topic) %>%
+  top_n(9, beta) %>%
+  ungroup()  %>%
+  arrange(topic, -beta)
+#Dessin du graphe
+#On retrouve la fonction ggplot, cette fois-ci avec geom_col qui permet de créer des diagrammes à barres (barplots).
+top_terms_FJ_1_4 %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) +
+                                                  facet_wrap(~ topic, scales = "free") +
+                                                  coord_flip() +
+                                                  scale_x_reordered()
+```
+
+ 4.2 Association des tokens aux topics
+
+Installation de la library reshape2 pour pouvoir utiliser la fonction melt qui permet de modifier le format des données en fonction d’une ou plusieurs variables de référence (passage d'une table large avec de nombreuses colonnes à une table haute avec de nombreuses lignes et peu de colonnes).
+```{r}
+if (!require("reshape2")){
+  install.packages("reshape2")
+  library("reshape2")
+}
+```
+ 
+```{r}
+df2_FJ_1_4 <- melt(as.matrix(dtm_FJ_1_4_clean))
+df2_FJ_1_4 <- df2_FJ_1_4[df2_FJ_1_4$Terms %in%findFreqTerms(dtm_FJ_1_4_clean, lowfreq = 100), ]
+ggplot(df2_FJ_1_4, aes(as.factor(Docs), Terms, fill=log(value))) +
+                                             geom_tile() +
+                                             xlab("Sujets") +
+                                             scale_fill_continuous(low="#FEE6CE", high="#E6550D") +
+                                             theme(axis.text.x = element_text(angle=90, hjust=1))
+```
+
+```{r, fig.width=12, fig.height=12}
+tt_FJ_1_4 <- posterior(lda_gibbs_FJ_1_4)$terms
+melted_FJ_1_4 = melt(tt_FJ_1_4[,findFreqTerms(dtm_FJ_1_4_clean, 75,500)])
+
+colnames(melted_FJ_1_4) <- c("Topics", "Terms", "value")
+melted_FJ_1_4$Topics <- as.factor(melted_FJ_1_4$Topics)
+ggplot(data = melted_FJ_1_4, aes(x=Topics, y=Terms, fill=value)) +
+                                                                      geom_tile() +
+                                                             theme(text = element_text(size=35))
+```
+
+ 4.3 Observation du _score gamma_
+ 
+Le score gamma est la probabilité qu'un document contienne un sujet.
+
+Les calculs sont faits avec un nombre de 9 topics.
+```{r}
+DocumentTopicProbabilities_FJ_1_4 <- as.data.frame(lda_gibbs_FJ_1_4@gamma)
+rownames(DocumentTopicProbabilities_FJ_1_4) <- rownames(corpus_FJ_1_4)
+head(DocumentTopicProbabilities_FJ_1_4)
+```
+
+ 4.4. Nuages de mots
+ 
+Pour faire des faire des _word clouds_, il faut installer les libraries suivantes :
+```{r}
+if (!require("wordcloud")){
+   install.packages("wordcloud")
+  library("wordcloud")
+}
+if (!require("RColorBrewer")){
+   install.packages("RColorBrewer")
+  library("RColorBrewer")
+}
+if (!require("wordcloud2")){
+   install.packages("wordcloud2")
+  library("wordcloud2")
+}
+```
+
+On récupère les mots et on les associe à leur 𝛃
+
+```{r, fig.width=20, fig.height=20}
+tm_FJ_1_4 <- posterior(lda_gibbs_FJ_1_4)$terms
+data_FJ_1_4 = data.frame(colnames(tm_FJ_1_4))
+head(data_FJ_1_4)
+```
+
+
+Puis on produit une visualisation par _topic_
+
+```{r, fig.width=30, fig.height=20}
+for(topic in seq(from = 1, to = 9, by = 1)){
+    data_FJ_1_4$topic <-tm_FJ_1_4[topic,]
+    #text(x=0.5, y=1, paste("V",topic, sep=""),cex=0.6)
+    wordcloud(
+      words = data_FJ_1_4$colnames.tm_FJ_1_4., #Mots à dessiner
+      freq = data_FJ_1_4$topic, #Fréquence des mots
+      #Min.freq=sous ce seuil, les mots ne seront pas affichés
+      min.freq=0.0002,
+      #max.words=nombre maximum de mots à afficher
+      max.words=20,
+      #Random.order dessine les mots dans un ordre aléatoire. Si faux, ils sont dessinés par ordre décroissant de la fréquence.
+      random.order=FALSE,
+      #rot.per=% de mots à 90°
+      rot.per=.35,
+      #taille du graphe
+      scale=c(10,10),
+      #couleurs
+      colors = brewer.pal(5, "Dark2")
+      # il est possible de rentrer directement les couleurs qui nous intéressent
+      #c("red", "blue", "yellow", "chartreuse", "cornflowerblue", "darkorange")
+    )
+}
+```
+

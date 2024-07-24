@@ -1,0 +1,12 @@
+Mots présents plus de 100 fois :
+
+[1] 28
+ [1] "alius"      "antipater"  "bellum"     "caesar"     "exercitus1" "facio"      "filius"     "frater"     "gratia"     "herodes"    "hostis"     "imperium"   "iudaeus"    "locus"      "magnus"     "manus1"    
+[17] "mors"       "pater"      "periculum"  "populus1"   "regnum"     "res"        "rex"        "romanus"    "superus"    "uideo"      "uir"        "urbs"      
+
+
+
+Mots présents plus de 200 fois :
+
+[1] 4
+[1] "bellum"  "rex"     "romanus" "urbs"   

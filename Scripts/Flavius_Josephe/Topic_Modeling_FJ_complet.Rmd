@@ -1,0 +1,314 @@
+---
+title: "Topic_Modeling_FJ_complet"
+output: html_document
+author: Alice Leflaëc et Mathilde Schwoerer
+date: "2023-04-23"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Note : la préparation des données pour Flavius Josèphe a été effectuée  avec Python. 
+
+# I. Préparation des données
+
+ 1.1 Définition de la session de travail
+# Indication du chemin vers le notebook
+```{r}
+setwd("~/Documents/FJ-PsH")
+monDossier="~/Users/mathildeschwoerer/Documents/FJ-PsH"
+```
+
+# Chargement du fichier .txt contenant le texte de Flavius Josèphe préalablement nettoyé avec Python. 
+```{r}
+FJ_complet <- readLines("Textes/FJ_relu1.txt")
+```
+
+ 1.2. Transformation en matrice vectorielle
+
+Il faut installer les packages tm et tidytext.
+```{r}
+if(!require("tm")){
+  install.packages("tm")
+  library("tm")
+}
+if(!require("tidytext")){
+  install.packages("tidytext")
+  library("tidytext")
+}
+
+#Je transforme mes textes en corpus avec la fonction `corpus()`, un objet de classe `corpus` manipulable dans `R` contenant des données et des métadonnées.
+#La fonction `VectorSource` transforme chaque document en vecteur.
+corpus_FJ_complet <- Corpus(VectorSource(FJ_complet), readerControl = list(language = "grc"))
+# J'affiche les informations à propos de ce corpus
+corpus_FJ_complet
+```
+
+
+ 1.4. Création d'un _document_term_matrix_
+
+Un _document_term_matrix_ est une matrice mathématique qui décrit la fréquence des termes qui apparaissent dans une collection de documents.
+
+```{r}
+dtm_FJ_complet <- DocumentTermMatrix(corpus_FJ_complet)
+dtm_FJ_complet
+```
+
+#II. Analyse des données : fréquence des termes
+
+ 2.1.Graphe représentant la fréquence des termes
+ Installation de la library pour le graphe et dessin du graphe.
+
+```{r}
+freq_FJ_complet <- as.data.frame(colSums(as.matrix(dtm_FJ_complet)))
+colnames(freq_FJ_complet) <- c("frequence")
+#as.data.frame est une fonction vérifiant qu'un objet est un dataframe ou le forçant à le devenir si c'est possible.
+#colSums est une fonction permettant de former des sommes et des moyennes de lignes et de colonnes pour des tableaux et des dataframes.
+#as.matrix est une fonction générique convertissant en matrice.
+#colnames récupère ou définit le nom des lignes et des colonnes dans un objet de type matrice.
+#c est une fonction générique qui combine ses arguments. La méthode par défaut combine les arguments pour former un vecteur.
+
+#Pour dessiner un graphe, nécessité d'installer une nouvelle library: `ggplot2`
+#gg = Grammar of Graphics
+#Avec ggplot 2, les données représentées graphiquement proviennent toujours d'un dataframe.
+if (!require("ggplot2")){
+  install.packages("ggplot2")
+  library("ggplot2")
+}
+#Dessin du graphe
+#La fonction ggplot initialise le graphique. On commence par définir la source des données (ici freq_Vulgate), puis on indique quelle donnée on veut représenter (les attributs esthétiques) en passant des arguments dans la fonction aes(). Cette fonction spécifie les variables à visualiser et associe à chaque variable un emplacement ou un rôle: on renseigne le paramètre x qui est la variable à représenter sur l'axe horizontal (ici la fréquence).
+#On ajoute, enfin, les éléments de représentation graphique (= geom). On les ajoute à l'objet graphique de base avec l'opérateur +. geom_density permet d'afficher l'estimation de densité d'une variable numérique. On crée une courbe de distribution.
+#Source de la plupart des explications : https://juba.github.io/tidyverse/08-ggplot2.html
+ggplot(freq_FJ_complet, aes(x=frequence)) + geom_density()
+```
+
+ 
+ 2.2.1 Mots avec de faibles fréquences
+On peut compter les mots avec les fréquences faibles, par exemple avec moins de 100 occurrences (n+1).
+
+```{r}
+motsPeuFrequents_FJ_complet <- findFreqTerms(dtm_FJ_complet, 0, 99)
+length(motsPeuFrequents_FJ_complet)
+head(motsPeuFrequents_FJ_complet,50)
+```
+
+
+ 2.2.2 Mots avec de fortes fréquences
+ On peut aussi compter et afficher les mots les plus fréquents, avec des seuils de 100 et 200.
+
+```{r}
+motsTresFrequents_FJ_complet <- findFreqTerms(dtm_FJ_complet, 99, Inf)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsTresFrequents)<-"latin-1"
+length(motsTresFrequents_FJ_complet)
+head(motsTresFrequents_FJ_complet,70)
+```
+
+```{r}
+motsTresFrequents_FJ_complet <- findFreqTerms(dtm_FJ_complet, 199, Inf)
+#Si vous êts sur windows, décommentez la ligne suivante
+#Encoding(motsTresFrequents)<-"latin-1"
+length(motsTresFrequents_FJ_complet)
+print(motsTresFrequents_FJ_complet)
+```
+
+
+ 2.2.3.Association entre les mots
+"Détruire, ravager"
+```{r}
+findAssocs(dtm_FJ_complet, terms = "διαφθείρω", corlimit = 0.8)
+```
+
+"Le Temple"
+```{r}
+findAssocs(dtm_FJ_complet, terms = "ναός", corlimit = 0.8)
+```
+
+ 2.3 On nettoie la DTM afin d'éliminer les rangs vides. 
+
+```{r}
+rowTotals <- apply(dtm_FJ_complet, 1, sum) 
+dtm_FJ_complet_clean   <- dtm_FJ_complet[rowTotals> 0, ]
+```
+
+
+#III. Topic Modeling avec la Latent Dirichlet Allocation 
+
+Un thème ( _topic_ ) se définit comme une récurrence de co-occurrences.
+
+3.1 Installation de la library pour le _topic_modeling_
+
+
+```{r}
+if(!require("topicmodels")){
+  install.packages("topicmodels")
+  library("topicmodels")
+}
+```
+
+ 3.2.1 Installation de la library "ldatuning" pour déterminer le nombre optimal de _topics_. 
+C'est une étape indispensable lorsqu'on utilise la LDA, parce qu'il faut lui indiquer un nombre de topics sur lequel travailler.
+ 
+```{r}
+if(!require("ldatuning")){
+  install.packages("ldatuning")
+  library("ldatuning")
+}
+```
+
+3.2.2 Détermination du nombre optimal de topics.
+```{r}
+topicsNumber_FJ_complet <- FindTopicsNumber(
+  #On indique la DTM : 
+  dtm_FJ_complet_clean,
+  #On indique le nombre de possibilité testées (cf. l'axe des abscisses qui commence à 2 et termine à 20) :
+  topics = seq(from = 2, to = 20, by = 1),
+  #Les métriques 
+  metrics = c("Griffiths2004", "CaoJuan2009", "Arun2010", "Deveaud2014"),
+  method = "Gibbs",
+  control = list(seed = 77),
+  verbose = TRUE
+)
+
+#Affichage du résultat
+FindTopicsNumber_plot(topicsNumber_FJ_complet)
+#Lecture du graph : "“Griffiths” et “Deveaud” suivent un principe de maximisation alors que “CaoJuan” et “Arun” obéissent à un principe de minimisation. Je vous épargne les détails techniques, mais l’idée ici est d’identifier l’endroit où simultanément “Griffiths” et “Deveaud” se rejoignent le plus et où c’est également le cas pour “CaoJuan” et “Arun”. Tout est histoire de compromis, trouver l’endroit ou l’écart entre les courbes est minimal en haut et en bas !" (source : https://ouvrir.passages.cnrs.fr/wp-content/uploads/2019/07/rapp_topicmodel.html)
+```
+D'après la méthode du coude, 7 pourrait apparaître comme le nombre optimal de topics. C'est un compromis entre les métriques de maximisation et de minimisation. 
+ 
+ 
+ 3.3.3 Exécution du calcul pour le topic modeling
+
+On recourt à l'échantillonnage de Gibbs. 
+ 
+```{r}
+#La machine effectue les calculs 2000 fois.
+burnin <- 2000
+#Puis encore 2000 fois.
+iter <- 2000
+# Les résultats ne sont enregistrés que toutes les 500 itérations.
+thin <- 500
+#seed et nstart pour la reproductibilité
+SEED=c(1, 2, 3, 4, 5)
+seed <-SEED
+nstart <- 5
+#Seul le meilleur modèle est utilisé.
+best <- TRUE
+#7 topics
+lda_gibbs_7_FJ_complet <- LDA(dtm_FJ_complet_clean, 7, method="Gibbs", control=list(nstart=nstart, seed=seed, best=best, burnin=burnin, iter=iter, thin=thin))
+```
+
+Les premiers résultats indiquent les mots pris dans un lien de co-occurrence. 
+
+```{r}
+"LDA GIBBS 10"
+termsTopic_lda_gibbs_7_FJ_complet <- as.data.frame(terms(lda_gibbs_7_FJ_complet,15))
+head(termsTopic_lda_gibbs_7_FJ_complet,11)
+```
+
+On utilise la variable `lda_gibbs_7_FJ_complet` pour construire une matrice avec les _β_ des tokens. Chaque token est répété 7 fois, (parce qu'on a 7 topics) avec une probabilité pour chaque _topic_:
+
+```{r}
+topics_FJ_complet <- tidy(lda_gibbs_7_FJ_complet, matrix = "beta")
+topics_FJ_complet
+```
+
+#IV. Visualisation
+
+ 4.1 Récupération des mots
+
+ 4.1.1 Installation de la library "dplyr"
+
+```{r}
+if (!require("dplyr")){
+   install.packages("dplyr")
+  library("dplyr")
+}
+```
+
+ 4.1.2 Affichage des mots récupérés dans un graphe
+
+```{r}
+#Recupération des mots
+top_terms_FJ_complet <- topics_FJ_complet %>%
+  group_by(topic) %>%
+  top_n(7, beta) %>%
+  ungroup()  %>%
+  arrange(topic, -beta)
+#Dessin du graphe
+#On retrouve la fonction ggplot, cette fois-ci avec geom_col qui permet de créer des diagrammes à barres (barplots).
+top_terms_FJ_complet %>%
+  mutate(term = reorder_within(term, beta, topic)) %>%
+  ggplot(aes(term, beta, fill = factor(topic))) + geom_col(show.legend = FALSE) +
+                                                  facet_wrap(~ topic, scales = "free") +
+                                                  coord_flip() +
+                                                  scale_x_reordered()
+```
+
+__________________________________MUR_d'HADRIEN_pour_HUMANISTICA_____________________________
+
+ 4.3 Observation du _score gamma_
+ 
+
+```{r}
+if (!require("reshape2")){
+  install.packages("reshape2")
+  library("reshape2")
+}
+```
+ 
+Le score gamma est la probabilité qu'un document contienne un sujet.
+
+Les calculs sont faits avec un nombre de 7 topics.
+```{r}
+DocumentTopicProbabilities_FJ_complet <- as.data.frame(lda_gibbs_7_FJ_complet@gamma)
+rownames(DocumentTopicProbabilities_FJ_complet) <- rownames(corpus_FJ_complet)
+head(DocumentTopicProbabilities_FJ_complet)
+```
+
+ 4.4. Nuages de mots
+ 
+Pour faire des faire des _word clouds_, il faut installer les libraries suivantes :
+```{r}
+if (!require("wordcloud")){
+   install.packages("wordcloud")
+  library("wordcloud")
+}
+if (!require("RColorBrewer")){
+   install.packages("RColorBrewer")
+  library("RColorBrewer")
+}
+if (!require("wordcloud2")){
+   install.packages("wordcloud2")
+  library("wordcloud2")
+}
+```
+
+Récupération et association des mots à leur bêta. 
+
+```{r, fig.width=20, fig.height=20}
+tm_FJ_complet <- posterior(lda_gibbs_7_FJ_complet)$terms
+data_FJ_complet = data.frame(colnames(tm_FJ_complet))
+head(data_FJ_complet)
+```
+
+
+Puis on produit une visualisation par _topic_
+
+```{r, fig.width=30, fig.height=20}
+for(topic in seq(from = 1, to = 7, by = 1)){
+    data_FJ_complet$topic <-tm_FJ_complet[topic,]
+    wordcloud(
+      words = data_FJ_complet$colnames.tm_FJ_complet.,
+      freq = data_FJ_complet$topic,
+      min.freq=0.0002,
+      max.words=20,
+      random.order=FALSE,
+      rot.per=.35,
+      scale=c(10,10),
+      colors = brewer.pal(5, "Dark2")
+    )
+}
+```
+
