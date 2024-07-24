@@ -21,7 +21,12 @@ Les comparaisons suivantes ont été réalisées :
 - entre le livre V du Pseudo-Hégésippe et les livres V à VII de Flavius Josèphe.
 
 ## Informations sur le dépôt GitHub
-* Le choix a été fait de déposer un seul fichier contenant le script R utilisé sur GitHub (celui contenant les calculs pour les livres I à IV des _Historiae_ du Pseudo-Hégésippe). Si nous avons travaillé dans des fichiers différents pour chaque portion étudiée, le script était toujours le même.
+* Le choix a été fait de ne pas modifier l'article coécrit avec Mathilde Schwoerer. Quelques nuances seront apportées lors de la soutenance orale.
+* Le dépôt contient :
+  - les textes utilisés
+  - l'ensemble des scripts utilisés
+  - diverses visualisations
+  - l'article résultant de l'étude menée
 
 ## Licence
 [CC-By 4.0](https://creativecommons.org/licenses/by/4.0/).
