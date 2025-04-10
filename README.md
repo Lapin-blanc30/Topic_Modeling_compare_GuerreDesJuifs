@@ -27,6 +27,7 @@ Les comparaisons suivantes ont été réalisées :
   - l'ensemble des scripts utilisés
   - diverses visualisations
   - l'article résultant de l'étude menée
+  - un complément personnel d'analyse
 
 ## Licence
 [CC-By 4.0](https://creativecommons.org/licenses/by/4.0/).
